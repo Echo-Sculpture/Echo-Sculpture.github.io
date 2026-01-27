@@ -20,7 +20,10 @@ main:
   - title: "About"
     url: /about/
     
-  - title: "Portfolio"
+  - title: "Research & Interactive Systems"  # 重点突出的 MaxMSP 部分
+    url: /research-code/    # 指向一个新的单独页面
+    
+  - title: "Portfolio"  # 包含新媒体艺术 + 商业音乐
     url: /portfolio/
         
   #- title: "Blog Posts"
