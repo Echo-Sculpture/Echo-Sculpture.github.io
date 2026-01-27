@@ -31,29 +31,40 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.min.js"></script>
 
 <style>
-  /* 1. 彻底挖空所有可能遮挡的层级 */
-  html, body, #main, .initial-content, .page, .page__content, 
-  .masthead, .greedy-nav, .sidebar, .page__footer, .archive {
+  /* 1. 深度拆除：把所有可能的白底容器全部透明化 */
+  html, body, 
+  #main, 
+  .initial-content, 
+  .page, 
+  .page__inner-wrap,
+  .page__content, 
+  .archive,
+  .masthead, 
+  .greedy-nav, 
+  .sidebar, 
+  .page__footer {
     background-color: transparent !important;
     background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
   }
 
-  /* 2. 只有文章主体部分保留一点点半透明白，保证文字可读 */
-  .page__inner-wrap {
-    background-color: rgba(255, 255, 255, 0.85) !important;
-    padding: 2em;
-    border-radius: 15px;
-    box-shadow: 0 0 20px rgba(0,0,0,0.05);
+  /* 2. 重新给文字内容加一层轻薄的“磨砂玻璃”感，否则字会看不清 */
+  /* 我们只给最核心的文字区域加底色 */
+  .page__content, .archive__item-excerpt, .sidebar {
+    background-color: rgba(255, 255, 255, 0.7) !important; /* 0.7 是透明度 */
+    padding: 15px;
+    border-radius: 8px;
   }
 
-  /* 3. 强制 p5 画布置底且固定 */
+  /* 3. 强制 p5 画布置底 */
   #interactive-bg {
     position: fixed !important;
     top: 0;
     left: 0;
     width: 100vw !important;
     height: 100vh !important;
-    z-index: -1 !important; /* 提到 -1，确保在 body 之上但在内容之下 */
+    z-index: -1 !important; /* 确保它在所有透明层下面 */
     pointer-events: none;
   }
 </style>
