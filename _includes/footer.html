@@ -1,82 +1,25 @@
+{% include base_path %}
+
+{% if site.author.github or site.author.bitbucket or site.atom_feed.hide != true %}
 <div class="page__footer-follow">
   <ul class="social-icons">
+    {% if site.data.ui-text[site.locale].follow_label %}
+      <li><strong>{{ site.data.ui-text[site.locale].follow_label }}</strong></li>
+    {% endif %}
     {% if site.author.github %}
       <li><a href="https://github.com/{{ site.author.github }}"><i class="fab fa-github" aria-hidden="true"></i> GitHub</a></li>
     {% endif %}
-    <li><a href="{{ base_path }}/feed.xml"><i class="fa fa-fw fa-rss-square" aria-hidden="true"></i> Feed</a></li>
+    {% if site.author.bitbucket %}
+      <li><a href="https://bitbucket.org/{{ site.author.bitbucket }}"><i class="fab fa-bitbucket" aria-hidden="true"></i> Bitbucket</a></li>
+    {% endif %}
+    {% if site.atom_feed.hide != true %}
+    <li><a href="{% if site.atom_feed.path %}{{ site.atom_feed.path }}{% else %}{{ base_path }}/feed.xml{% endif %}"><i class="fa fa-fw fa-rss-square" aria-hidden="true"></i> {{ site.data.ui-text[site.locale].feed_label | default: "Feed" }}</a></li>
+    {% endif %}
   </ul>
 </div>
+{% endif %}
 
 <div class="page__footer-copyright">
-  &copy; {{ site.time | date: '%Y' }} {{ site.name | default: site.title }}. Powered by Jekyll & AcademicPages.
-  <br />Site last updated {{ "now" | date: '%Y-%m-%d' }}
+  &copy; {{ site.time | date: '%Y' }} {{ site.name | default: site.title }}, {{ site.data.ui-text[site.locale].powered_by | default: "Powered by" }} <a href="https://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://github.com/academicpages/academicpages.github.io">AcademicPages</a>, a fork of <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.<br />
+  Site last updated {{ "now" | date: '%Y-%m-%d' }}
 </div>
-
-<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.min.js"></script>
-
-<style>
-  /* 挖空所有白底容器 */
-  html, body, #main, .initial-content, .page, .page__inner-wrap,
-  .page__content, .archive, .masthead, .greedy-nav, .sidebar, .page__footer {
-    background-color: transparent !important;
-    background: transparent !important;
-    border: none !important;
-    box-shadow: none !important;
-  }
-
-  /* 保护文字区域的阅读体验：加一层淡淡的磨砂感 */
-  .page__content, .sidebar {
-    background-color: rgba(255, 255, 255, 0.8) !important;
-    padding: 20px;
-    border-radius: 12px;
-  }
-
-  /* 画布置于底层 */
-  #interactive-bg {
-    position: fixed !important;
-    top: 0;
-    left: 0;
-    width: 100vw !important;
-    height: 100vh !important;
-    z-index: -1 !important;
-    pointer-events: none;
-  }
-</style>
-
-<script>
-  function setup() {
-    let cnv = createCanvas(windowWidth, windowHeight);
-    cnv.id('interactive-bg');
-    cnv.parent(document.body);
-    frameRate(30);
-  }
-
-  function draw() {
-    clear(); // 保持背景透明的关键
-    stroke(0, 122, 255, 120); // 经典的数字蓝色
-    strokeWeight(1.5);
-    
-    let step = 50;
-    for (let x = 0; x <= width; x += step) {
-      for (let y = 0; y <= height; y += step) {
-        let d = dist(mouseX, mouseY, x, y);
-        if (d < 250) {
-          let angle = atan2(y - mouseY, x - mouseX);
-          let offset = map(d, 0, 250, 25, 0);
-          let px = x + cos(angle) * offset;
-          let py = y + sin(angle) * offset;
-          point(px, py);
-          if (d < 150) {
-            line(px, py, mouseX, mouseY);
-          }
-        } else {
-          point(x, y);
-        }
-      }
-    }
-  }
-
-  function windowResized() {
-    resizeCanvas(windowWidth, windowHeight);
-  }
-</script>
