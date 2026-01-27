@@ -14,19 +14,46 @@
 </div>
 
 <style>
-  /* 解决遮挡：让背景穿透 */
-  #main, .page, .page__inner-wrap, .page__content, .sidebar, .masthead, .greedy-nav {
+  /* 1. 深度拆除：把所有可能挡住背景的层级全部设为透明 */
+  html, body, 
+  #main, 
+  .initial-content, 
+  .page, 
+  .page__inner-wrap,
+  .page__content, 
+  .page__footer,
+  .masthead, 
+  .greedy-nav, 
+  .sidebar,
+  .archive {
     background-color: transparent !important;
     background: transparent !important;
-    box-shadow: none !important;
     border: none !important;
+    box-shadow: none !important;
   }
-  /* 给文字加一层很薄的磨砂白，既能看清字又能看清背景 */
+
+  /* 2. 这里的选择器是关键：AcademicPages 某些版本会给 wrapper 加背景 */
+  #main-content, #main-wrapper, .wrapper {
+    background-color: transparent !important;
+  }
+
+  /* 3. 保护文字可读性：只给最内层的文字块加半透明色 */
+  /* 如果你觉得文字还是看不清，可以把 0.75 调高到 0.85 */
   .page__inner-wrap {
-    background-color: rgba(255, 255, 255, 0.75) !important;
-    padding: 2em !important;
-    border-radius: 10px !important;
-    backdrop-filter: blur(4px); /* 现代浏览器高级感 */
+    background-color: rgba(255, 255, 255, 0.75) !important; 
+    padding: 30px !important;
+    border-radius: 15px !important;
+    backdrop-filter: blur(4px); /* 让背景有一点朦胧感，更高级 */
+    z-index: 1;
+  }
+
+  /* 4. 确保 p5 画布在所有透明层之下，但在 body 之上 */
+  #p5-background {
+    position: fixed !important;
+    top: 0;
+    left: 0;
+    z-index: -1 !important; /* 置底 */
+    pointer-events: none;
   }
 </style>
 
