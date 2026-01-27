@@ -23,3 +23,78 @@
   &copy; {{ site.time | date: '%Y' }} {{ site.name | default: site.title }}, {{ site.data.ui-text[site.locale].powered_by | default: "Powered by" }} <a href="https://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://github.com/academicpages/academicpages.github.io">AcademicPages</a>, a fork of <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.<br />
   Site last updated {{ "now" | date: '%Y-%m-%d' }}
 </div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.min.js"></script>
+
+<style>
+  /* 强制背景透明，让 p5 画布露出来 */
+  body, .page__content, .page, .masthead, .greedy-nav {
+    background-color: transparent !important;
+    background: transparent !important;
+  }
+  
+  /* 给文字内容加一点点半透明白底，防止看不清字 */
+  .page__inner-wrap {
+    background-color: rgba(255, 255, 255, 0.85); /* 0.85是透明度，你可以调 */
+    padding: 20px;
+    border-radius: 10px;
+  }
+
+  /* p5 画布的样式 */
+  #interactive-bg {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: -9999; /* 放在最底层 */
+    pointer-events: none; /* 让鼠标点击能穿透画布点到按钮 */
+  }
+</style>
+
+<script>
+  function setup() {
+    let cnv = createCanvas(windowWidth, windowHeight);
+    cnv.id('interactive-bg'); // 给画布绑定ID
+    frameRate(30); // 限制帧率省电
+  }
+
+  function draw() {
+    clear(); // 这一步很关键！每次画之前清空，保持背景透明
+    
+    // --- 这是一个简单的鼠标交互示例 ---
+    // 鼠标周围产生连接线网络
+    
+    // 设置线条颜色 (R, G, B, Alpha) - 浅灰色
+    stroke(150, 150, 150, 100); 
+    strokeWeight(1);
+    
+    // 画一个简单的网格，当鼠标靠近时扭曲
+    let step = 50; // 网格间距
+    for (let x = 0; x <= width; x += step) {
+      for (let y = 0; y <= height; y += step) {
+        let d = dist(mouseX, mouseY, x, y);
+        
+        if (d < 150) { // 只有鼠标周围 150 像素内的点会有反应
+          // 简单的排斥效果
+          let angle = atan2(y - mouseY, x - mouseX);
+          let push = map(d, 0, 150, 20, 0);
+          let newX = x + cos(angle) * push;
+          let newY = y + sin(angle) * push;
+          
+          point(newX, newY);
+          // 画线连接鼠标
+          if (d < 100) {
+            line(newX, newY, mouseX, mouseY);
+          }
+        } else {
+          // 远处的点保持静止（或者画淡一点的点）
+          point(x, y);
+        }
+      }
+    }
+  }
+
+  function windowResized() {
+    resizeCanvas(windowWidth, windowHeight);
+  }
+</script>
