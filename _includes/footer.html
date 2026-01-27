@@ -31,49 +31,60 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.min.js"></script>
 
 <style>
-  body, .page__content, .page, .masthead, .greedy-nav, .sidebar {
+  /* 1. 彻底挖空所有可能遮挡的层级 */
+  html, body, #main, .initial-content, .page, .page__content, 
+  .masthead, .greedy-nav, .sidebar, .page__footer, .archive {
     background-color: transparent !important;
     background: transparent !important;
   }
+
+  /* 2. 只有文章主体部分保留一点点半透明白，保证文字可读 */
   .page__inner-wrap {
-    background-color: rgba(255, 255, 255, 0.9); /* 调高一点点，确保文字清晰 */
-    padding: 20px;
-    border-radius: 10px;
+    background-color: rgba(255, 255, 255, 0.85) !important;
+    padding: 2em;
+    border-radius: 15px;
     box-shadow: 0 0 20px rgba(0,0,0,0.05);
   }
+
+  /* 3. 强制 p5 画布置底且固定 */
   #interactive-bg {
-    position: fixed;
+    position: fixed !important;
     top: 0;
     left: 0;
-    width: 100vw;
-    height: 100vh;
-    z-index: -999;
+    width: 100vw !important;
+    height: 100vh !important;
+    z-index: -1 !important; /* 提到 -1，确保在 body 之上但在内容之下 */
     pointer-events: none;
   }
 </style>
 
 <script>
   function setup() {
+    // 强制把画布放到 body 最底层
     let cnv = createCanvas(windowWidth, windowHeight);
     cnv.id('interactive-bg');
+    cnv.parent(document.body); 
     frameRate(30);
   }
 
   function draw() {
     clear(); 
-    stroke(100, 150, 255, 80); // 换成淡蓝色，更适合早稻田的感觉
-    strokeWeight(1);
+    // 调亮颜色，方便你在没效果时能看清
+    stroke(0, 122, 255, 150); 
+    strokeWeight(2);
     
-    let step = 60;
+    let step = 50;
     for (let x = 0; x <= width; x += step) {
       for (let y = 0; y <= height; y += step) {
         let d = dist(mouseX, mouseY, x, y);
-        if (d < 200) {
+        if (d < 250) {
           let angle = atan2(y - mouseY, x - mouseX);
-          let offset = map(d, 0, 200, 15, 0);
-          point(x + cos(angle) * offset, y + sin(angle) * offset);
-          if (d < 120) {
-            line(x + cos(angle) * offset, y + sin(angle) * offset, mouseX, mouseY);
+          let offset = map(d, 0, 250, 30, 0);
+          let px = x + cos(angle) * offset;
+          let py = y + sin(angle) * offset;
+          point(px, py);
+          if (d < 150) {
+            line(px, py, mouseX, mouseY);
           }
         } else {
           point(x, y);
