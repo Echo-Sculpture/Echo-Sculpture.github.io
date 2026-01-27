@@ -26,34 +26,6 @@
 
 {% raw %}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.min.js"></script>
-<style>
-  /* 1. 强制挖开最核心的几个白底容器 */
-  #main, 
-  .page, 
-  .page__inner-wrap,
-  .page__content,
-  .archive,
-  .sidebar {
-    background-color: transparent !important;
-    background: transparent !important;
-    border: none !important;
-    box-shadow: none !important;
-  }
-
-  /* 2. 给文字主体区域加一层“磨砂玻璃”感 */
-  /* 这样背景线条会透出来，但文字依然清晰 */
-  .page__inner-wrap {
-    background-color: rgba(255, 255, 255, 0.7) !important; /* 0.7是透明度，你可以调到0.5更透 */
-    padding: 30px !important;
-    border-radius: 15px !important;
-    backdrop-filter: blur(5px); /* 这一行能增加高级的模糊感 */
-  }
-
-  /* 3. 确保侧边栏也透明 */
-  .sidebar {
-    background-color: rgba(255, 255, 255, 0.5) !important;
-  }
-</style>
 <script>
   function setup() {
     let cnv = createCanvas(windowWidth, windowHeight);
@@ -63,10 +35,31 @@
     cnv.style('z-index', '-1');
     cnv.parent(document.body);
   }
-  function draw() {
-    clear();
-    stroke(255, 0, 0, 100);
-    line(0, 0, mouseX, mouseY);
+ function draw() {
+    clear(); 
+    stroke(0, 122, 255, 120); // 换成半透明的蓝色，更具科技感
+    strokeWeight(1.5);
+    
+    let step = 60; // 点的间距
+    for (let x = 0; x <= width; x += step) {
+      for (let y = 0; y <= height; y += step) {
+        let d = dist(mouseX, mouseY, x, y);
+        if (d < 250) {
+          let angle = atan2(y - mouseY, x - mouseX);
+          let offset = map(d, 0, 250, 20, 0); // 随鼠标抖动
+          let px = x + cos(angle) * offset;
+          let py = y + sin(angle) * offset;
+          
+          point(px, py); // 画点
+          
+          if (d < 150) {
+            line(px, py, mouseX, mouseY); // 画连线
+          }
+        } else {
+          point(x, y);
+        }
+      }
+    }
   }
   function windowResized() {
     resizeCanvas(windowWidth, windowHeight);
