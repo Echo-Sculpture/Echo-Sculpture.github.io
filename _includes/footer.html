@@ -4,97 +4,152 @@
     {% if site.author.github %}
       <li><a href="https://github.com/{{ site.author.github }}"><i class="fab fa-github" aria-hidden="true"></i> GitHub</a></li>
     {% endif %}
-    <li><a href="{% if site.atom_feed.path %}{{ site.atom_feed.path }}{% else %}{{ base_path }}/feed.xml{% endif %}"><i class="fa fa-fw fa-rss-square" aria-hidden="true"></i> Feed</a></li>
+    <li><a href="{{ base_path }}/feed.xml"><i class="fa fa-fw fa-rss-square" aria-hidden="true"></i> Feed</a></li>
   </ul>
 </div>
 {% endif %}
 
 <div class="page__footer-copyright">
-  &copy; {{ site.time | date: '%Y' }} {{ site.name | default: site.title }}. Site last updated {{ "now" | date: '%Y-%m-%d' }}
+  &copy; {{ site.time | date: '%Y' }} {{ site.name | default: site.title }}.
 </div>
 
 <style>
-  /* 1. 深度拆除：把所有可能挡住背景的层级全部设为透明 */
-  html, body, 
-  #main, 
-  .initial-content, 
-  .page, 
-  .page__inner-wrap,
-  .page__content, 
-  .page__footer,
-  .masthead, 
-  .greedy-nav, 
-  .sidebar,
-  .archive {
+  /* 基础背景穿透设置 */
+  html, body, #main, .initial-content, .page, .page__inner-wrap, .page__content, .page__footer, .masthead, .greedy-nav, .sidebar, .archive, #main-content, #main-wrapper, .wrapper {
     background-color: transparent !important;
     background: transparent !important;
     border: none !important;
     box-shadow: none !important;
   }
-
-  /* 2. 这里的选择器是关键：AcademicPages 某些版本会给 wrapper 加背景 */
-  #main-content, #main-wrapper, .wrapper {
-    background-color: transparent !important;
-  }
-
-  /* 3. 保护文字可读性：只给最内层的文字块加半透明色 */
-  /* 如果你觉得文字还是看不清，可以把 0.75 调高到 0.85 */
   .page__inner-wrap {
     background-color: rgba(255, 255, 255, 0.75) !important; 
     padding: 30px !important;
     border-radius: 15px !important;
-    backdrop-filter: blur(4px); /* 让背景有一点朦胧感，更高级 */
+    backdrop-filter: blur(4px);
     z-index: 1;
   }
-
-  /* 4. 确保 p5 画布在所有透明层之下，但在 body 之上 */
   #p5-background {
     position: fixed !important;
-    top: 0;
-    left: 0;
-    z-index: -1 !important; /* 置底 */
+    top: 0; left: 0;
+    z-index: -1 !important;
     pointer-events: none;
   }
 </style>
 
-{% raw %}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/addons/p5.sound.min.js"></script>
+
+{% raw %}
 <script>
+  /**
+   * 基于用户提供的 Rectangle & Spectrogram 类逻辑
+   */
+  class Rectangle {
+    constructor(x, y, width, height) {
+      this.x = x; this.y = y; this.width = width; this.height = height;
+    }
+    getBottom() { return this.y + this.height; }
+    getRight() { return this.x + this.width; }
+  }
+
+  class Spectrogram extends Rectangle {
+    constructor(x, y, width, height, lengthInSeconds) {
+      super(x, y, width, height);
+      this.samplingRate = sampleRate() || 44100;
+      this.lengthInSeconds = lengthInSeconds;
+      this.bufferIndex = 0;
+      
+      // 双缓冲区实现平滑滚动
+      this.gfx1 = createGraphics(this.width, this.height);
+      this.gfx2 = createGraphics(this.width, this.height);
+      this.gfx1.x = 0;
+      this.gfx2.x = this.width;
+    }
+
+    update(spectrum) {
+      let xBufferVal = map(this.bufferIndex, 0, this.lengthInSeconds * this.samplingRate, 0, this.width);
+      let xVal = xBufferVal % this.width;
+      let selectIdx = floor(xBufferVal / this.width) % 2;
+      let activeGfx = (selectIdx === 0) ? this.gfx1 : this.gfx2;
+
+      // 滚动逻辑
+      if (selectIdx === 0) {
+        this.gfx1.x = -xVal;
+        this.gfx2.x = this.width - xVal;
+      } else {
+        this.gfx1.x = this.width - xVal;
+        this.gfx2.x = -xVal;
+      }
+
+      activeGfx.noStroke();
+      // 使用像素块渲染 (基于 Spectrogram 逻辑)
+      let res = 15; 
+      for (let i = 0; i < spectrum.length; i += 4) {
+        let y = map(i, 0, spectrum.length, this.height, 0);
+        let amp = spectrum[i];
+        if (amp > 40) {
+          let hue = map(i, 0, spectrum.length, 200, 300); // 垂直颜色梯度
+          activeGfx.fill(hue, 80, 90, map(amp, 0, 255, 0, 100));
+          activeGfx.rect(xVal, y, 2, res); 
+        }
+      }
+      this.bufferIndex += spectrum.length;
+    }
+
+    draw() {
+      image(this.gfx1, this.gfx1.x, this.y);
+      image(this.gfx2, this.gfx2.x, this.y);
+    }
+  }
+
+  let mic, fft, spectrogram;
+  let isStarted = false;
+
   function setup() {
     let cnv = createCanvas(windowWidth, windowHeight);
-    cnv.style('position', 'fixed');
-    cnv.style('top', '0');
-    cnv.style('left', '0');
-    cnv.style('z-index', '-1');
+    cnv.id('p5-background');
     cnv.parent(document.body);
+    colorMode(HSB, 360, 100, 100, 100);
+    
+    fft = new p5.FFT(0.8, 1024);
+    // 延迟初始化 Spectrogram 直到音频环境准备好
   }
 
   function draw() {
     clear(); 
-    stroke(0, 122, 255, 120); 
-    strokeWeight(1.5);
-    let step = 60;
-    for (let x = 0; x <= width; x += step) {
-      for (let y = 0; y <= height; y += step) {
-        let d = dist(mouseX, mouseY, x, y);
-        if (d < 250) {
-          let angle = atan2(y - mouseY, x - mouseX);
-          let offset = map(d, 0, 250, 20, 0);
-          let px = x + cos(angle) * offset;
-          let py = y + sin(angle) * offset;
-          point(px, py);
-          if (d < 150) {
-            line(px, py, mouseX, mouseY);
-          }
-        } else {
-          point(x, y);
-        }
-      }
+    if (!isStarted) {
+      fill(100);
+      textAlign(CENTER);
+      text("CLICK TO START AUDIO SYSTEM", width/2, height/2);
+      return;
+    }
+
+    let spectrum = fft.analyze();
+    if (spectrogram) {
+      spectrogram.update(spectrum);
+      spectrogram.draw();
+    }
+  }
+
+  function mousePressed() {
+    if (!isStarted) {
+      userStartAudio().then(() => {
+        mic = new p5.AudioIn();
+        mic.start();
+        fft.setInput(mic);
+        // 初始化 Spectrogram 对象，持续 10 秒一个循环
+        spectrogram = new Spectrogram(0, 0, width, height, 10);
+        isStarted = true;
+      });
     }
   }
 
   function windowResized() {
     resizeCanvas(windowWidth, windowHeight);
+    if (spectrogram) {
+      // 窗口缩放时重置，防止缓冲区错位
+      spectrogram = new Spectrogram(0, 0, width, height, 10);
+    }
   }
 </script>
 {% endraw %}
