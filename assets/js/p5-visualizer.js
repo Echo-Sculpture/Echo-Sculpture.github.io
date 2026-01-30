@@ -4,6 +4,14 @@ let mic, fft;
 let isAudioStarted = false;
 let visualizers = []; 
 
+// 统一定义背景和前景颜色，方便修改
+const THEME = {
+  bg: 20,       // 全局大背景
+  moduleBg: 20, // 模块背景（设为一样实现无缝）
+  stroke: 200,  // 数据线条颜色（浅灰/白）
+  axis: 80      // 坐标轴文字颜色（深灰，低调不抢眼）
+};
+
 function setup() {
   let cnv = createCanvas(windowWidth, windowHeight);
   cnv.id('p5-background');
@@ -13,13 +21,13 @@ function setup() {
 
 function draw() {
   if (!isAudioStarted) {
-    background(20);
-    fill(150); textAlign(CENTER); textSize(16);
-    text("AUDIO ENGINE READY. CLICK TO INITIALIZE LAYOUT.", width/2, height/2);
+    background(THEME.bg);
+    fill(100); textAlign(CENTER); textSize(16);
+    text("SYSTEM READY. CLICK TO START VISUALIZATION.", width/2, height/2);
     return;
   }
 
-  background(30); // 纯净深灰背景
+  background(THEME.bg);
 
   let spectrum = fft.analyze();
   let waveform = fft.waveform();
@@ -49,21 +57,20 @@ function mousePressed() {
 
 function initLayout() {
   visualizers = [];
-  let padding = 20;
-  // 核心比例：三层等分
+  let padding = 30; // 稍微加大间距，更有呼吸感
   let sectionH = (height - padding * 4) / 3;
-  let bg = color(40); 
+  let bg = color(THEME.moduleBg); 
 
-  // 1. 顶部：滚动波形 (Waveform)
+  // 1. 顶部：滚动波形
   visualizers.push(new WaveformVisualizer(padding, padding, width - padding * 2, sectionH, bg, 10));
 
-  // 2. 中间：滚动频谱 (Spectrogram)
+  // 2. 中间：滚动频谱
   visualizers.push(new Spectrogram(padding, sectionH + padding * 2, width - padding * 2, sectionH, bg, 10));
 
-  // 3. 底部左侧：实时频谱统计 (Spectrum)
+  // 3. 底部左侧：实时频谱
   visualizers.push(new SpectrumVisualizer(padding, sectionH * 2 + padding * 3, (width - padding * 3) / 2, sectionH, bg));
 
-  // 4. 底部右侧：即时波形 (Instant)
+  // 4. 底部右侧：即时波形
   visualizers.push(new InstantWaveformVis((width + padding) / 2, sectionH * 2 + padding * 3, (width - padding * 3) / 2, sectionH, bg));
 }
 
@@ -73,7 +80,7 @@ function windowResized() {
 }
 
 // ==========================================
-// 核心类定义 (已修复作用域 Bug)
+// 核心类定义（已移除边框与背景色块）
 // ==========================================
 
 class Rectangle {
@@ -102,19 +109,20 @@ class SoundVisualizer extends Rectangle {
   getMaxXAsTime() { return (this.bufferIndex < this.getXAxisLengthInSamples()) ? this.lengthInSeconds : this.bufferIndex / this.samplingRate; }
   
   drawXAxis() {
-    push(); textSize(9); stroke(100); fill(150);
+    push(); textSize(10); stroke(THEME.axis); fill(THEME.axis);
     for (let t of this.xTicks) {
       let px = map(t, this.getMinXAsTime(), this.getMaxXAsTime(), this.x, this.x + this.width);
       if (px >= this.x && px <= this.x + this.width) {
-        line(px, this.getBottom()-3, px, this.getBottom());
-        text(nfc(t,1)+"s", px - 5, this.getBottom()-5);
+        line(px, this.getBottom(), px, this.getBottom()+5); // 刻度线
+        noStroke();
+        text(nfc(t,1)+"s", px - 8, this.getBottom() + 15);
       }
     }
     pop();
   }
 }
 
-// 1. 顶部波形
+// 1. 滚动波形 - 移除矩形填充
 class WaveformVisualizer extends SoundVisualizer {
   constructor(x,y,w,h,bg,len) { super(x,y,w,h,bg,len); this.waveformDraw = []; this.waveformBuffer = []; }
   update(waveform) {
@@ -128,14 +136,17 @@ class WaveformVisualizer extends SoundVisualizer {
     super.update(waveform);
   }
   draw() {
-    push(); fill(this.backgroundColor); noStroke(); rect(this.x, this.y, this.width, this.height);
-    stroke(255); noFill(); 
+    push(); 
+    stroke(THEME.stroke); noFill(); 
+    // 绘制基准中线（可选，增加工作站质感）
+    stroke(THEME.axis, 50); line(this.x, this.y + this.height/2, this.x + this.width, this.y + this.height/2);
+    stroke(THEME.stroke);
     for(let i=0; i<this.waveformDraw.length; i++) line(this.x+i, this.waveformDraw[i].min, this.x+i, this.waveformDraw[i].max);
     pop(); this.drawXAxis();
   }
 }
 
-// 2. 中间频谱 (修复了 sectionH 报错)
+// 2. 滚动频谱 - 纯净滚动
 class Spectrogram extends SoundVisualizer {
   constructor(x,y,w,h,bg,len) {
     super(x,y,w,h,bg,len);
@@ -150,9 +161,13 @@ class Spectrogram extends SoundVisualizer {
       if(int(xBuf/this.width)%2==0){ this.off1.x = this.width-x; this.off2.x = -x; }
       else { this.off1.x = -x; this.off2.x = this.width-x; }
     }
+    // 清除下一帧路径，防止重叠
+    active.strokeWeight(2);
+    active.stroke(THEME.bg); active.line(x, 0, x, this.height);
+
     active.strokeWeight(1);
     for(let i=0; i<spec.length; i+=2){
-      active.stroke(map(spec[i],0,255,40,255)); // 灰度映射
+      active.stroke(map(spec[i],0,255,THEME.bg,255)); 
       active.point(x, map(i,0,spec.length,this.height,0));
     }
     super.update(spec);
@@ -163,38 +178,40 @@ class Spectrogram extends SoundVisualizer {
     this.drawYAxis(); this.drawXAxis(); 
   }
   drawYAxis() {
-    push(); stroke(150); fill(150); textSize(9);
+    push(); stroke(THEME.axis); fill(THEME.axis); textSize(9);
     for(let i=0; i<=4; i++) {
-      let y = (this.height/4) * i;
+      let py = (this.height/4) * i;
       let freq = map(4-i, 0, 4, 0, sampleRate()/2);
-      text(nfc(freq,0)+"Hz", this.x+5, this.y+y+10);
+      text(nfc(freq,0)+"Hz", this.x - 35, this.y + py + 4);
     }
     pop();
   }
 }
 
-// 3. 底部左侧实时频谱
+// 3. 实时频谱 - 移除背景框
 class SpectrumVisualizer extends Rectangle {
   constructor(x,y,w,h,bg) { super(x,y,w,h,bg); this.spectrum = []; }
   update(s) { this.spectrum = s; }
   draw() {
-    push(); fill(this.backgroundColor); rect(this.x,this.y,this.width,this.height);
-    fill(200, 100); stroke(255); beginShape();
+    push(); 
+    fill(THEME.stroke, 50); stroke(THEME.stroke); 
+    beginShape();
     for(let i=0; i<this.spectrum.length; i++){
-      vertex(map(i,0,this.spectrum.length,this.x,this.getLeft()+this.width), map(this.spectrum[i],0,255,this.getBottom(),this.y));
+      vertex(map(i,0,this.spectrum.length,this.x,this.x+this.width), map(this.spectrum[i],0,255,this.getBottom(),this.y));
     }
-    vertex(this.getLeft()+this.width,this.getBottom()); vertex(this.x,this.getBottom()); endShape(CLOSE); pop();
+    vertex(this.x+this.width,this.getBottom()); vertex(this.x,this.getBottom()); endShape(CLOSE); pop();
   }
 }
 
-// 4. 底部右侧即时波形
+// 4. 即时波形 - 移除背景框
 class InstantWaveformVis extends Rectangle {
   constructor(x,y,w,h,bg) { super(x,y,w,h,bg); this.w = []; }
   update(w) { this.w = w; }
   draw() {
-    push(); fill(this.backgroundColor); rect(this.x,this.y,this.width,this.height);
-    noFill(); stroke(255); strokeWeight(1.5); beginShape();
-    for(let i=0; i<this.w.length; i++) vertex(map(i,0,this.w.length,this.x,this.getLeft()+this.width), map(this.w[i],-1,1,this.getBottom(),this.y));
+    push(); 
+    noFill(); stroke(THEME.stroke); strokeWeight(1.5); 
+    beginShape();
+    for(let i=0; i<this.w.length; i++) vertex(map(i,0,this.w.length,this.x,this.x+this.width), map(this.w[i],-1,1,this.getBottom(),this.y));
     endShape(); pop();
   }
 }
