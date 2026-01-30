@@ -1,4 +1,6 @@
 /* assets/js/p5-visualizer.js */
+
+// ... Rectangle 和 Spectrogram 类保持不变 ...
 class Rectangle {
   constructor(x, y, w, h) { this.x = x; this.y = y; this.w = w; this.h = h; }
   getBottom() { return this.y + this.h; }
@@ -17,7 +19,7 @@ class Spectrogram extends Rectangle {
   }
 
   update(spectrum) {
-    if (!spectrum) return;
+    if (!spectrum || spectrum[0] === undefined) return;
     let totalSamples = this.lenSec * this.samplingRate;
     let xBufVal = map(this.bufferIndex, 0, totalSamples, 0, this.w);
     let xVal = xBufVal % this.w;
@@ -28,12 +30,13 @@ class Spectrogram extends Rectangle {
     else { this.gfx1.x = this.w - xVal; this.gfx2.x = -xVal; }
 
     active.noStroke();
+    // 调高亮度，确保能看到
     for (let i = 0; i < spectrum.length; i += 6) {
       let amp = spectrum[i];
-      if (amp > 10) { // 调低阈值，更容易看到
+      if (amp > 5) { 
         let y = map(i, 0, spectrum.length, this.h, 0);
         let hue = map(i, 0, spectrum.length, 180, 260);
-        active.fill(hue, 80, 100, map(amp, 0, 255, 20, 100));
+        active.fill(hue, 90, 100, map(amp, 0, 255, 50, 100));
         active.rect(xVal, y, 3, 5); 
       }
     }
@@ -53,27 +56,32 @@ function setup() {
   cnv.id('p5-background');
   cnv.parent(document.body);
   colorMode(HSB, 360, 100, 100, 100);
+  
+  // 初始化 FFT 但先不连输入
   fft = new p5.FFT(0.8, 512);
 }
 
 function draw() {
   if (!isReady) {
-    background(20); // 未启动时显灰色
+    background(10);
     fill(255); textAlign(CENTER);
-    text("TAP SCREEN TO START", width/2, height/2);
+    text("PLEASE CLICK TO ACTIVATE AUDIO", width/2, height/2);
     return;
   }
   
-  // --- 暴力测试模式 ---
-  background(0); // 强制黑色背景，不再透明，确保你能看到画布
+  clear(); // 恢复透明背景
   
+  // 必须每帧调用 analyze() 才能更新内部数据
   let spectrum = fft.analyze();
-  let energy = fft.getEnergy("bass"); // 获取低音能量
+  let amp = fft.getEnergy(20, 200); // 监听低频能量
 
-  // 画一个随声音跳动的圆（放在最前面，确保必现）
-  fill(0, 100, 100); // 纯红色
+  // 测试红圆：如果麦克风有声音，它一定会动
+  push();
+  fill(0, 100, 100); 
   noStroke();
-  ellipse(width/2, height/2, 50 + energy * 2);
+  let r = 50 + map(amp, 0, 255, 0, 200);
+  ellipse(width/2, height/2, r);
+  pop();
 
   if (visualizer && spectrum) { 
     visualizer.update(spectrum); 
@@ -83,11 +91,22 @@ function draw() {
 
 function mousePressed() {
   if (!isReady) {
+    // 强制恢复 AudioContext
+    if (getAudioContext().state !== 'running') {
+      getAudioContext().resume();
+    }
+
     userStartAudio().then(() => {
       mic = new p5.AudioIn();
       mic.start(() => {
-        visualizer = new Spectrogram(0, 0, width, height, 15);
+        console.log("Mic successfully started");
+        // 重要：显式连接 mic 到 fft
+        fft.setInput(mic); 
+        visualizer = new Spectrogram(0, 0, width, height, 20);
         isReady = true;
+      }, (err) => {
+        console.error("Mic access denied", err);
+        alert("请确保浏览器允许使用麦克风！");
       });
     });
   }
