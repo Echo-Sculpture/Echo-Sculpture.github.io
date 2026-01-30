@@ -10,36 +10,20 @@
 {% endif %}
 
 <div class="page__footer-copyright">
-  &copy; {{ site.time | date: '%Y' }} {{ site.name | default: site.title }}. Site last updated {{ "now" | date: '%Y-%m-%d' }}
+  &copy; {{ site.time | date: '%Y' }} {{ site.name | default: site.title }}.
 </div>
 
 <style>
-  /* === 1. 深度拆墙 CSS (保持不变) === */
-  html, body, #main, .initial-content, .page, .page__inner-wrap,
-  .page__content, .page__footer, .masthead, .greedy-nav, .sidebar, .archive,
-  #main-content, #main-wrapper, .wrapper {
-    background-color: transparent !important;
-    background: transparent !important;
-    border: none !important;
-    box-shadow: none !important;
-  }
-
-  /* === 2. 文字区域磨砂玻璃效果 === */
-  .page__inner-wrap {
-    background-color: rgba(255, 255, 255, 0.8) !important; 
-    padding: 30px !important;
-    border-radius: 15px !important;
-    backdrop-filter: blur(5px);
-    z-index: 1;
-  }
-
-  /* === 3. p5.js 画布全屏置底 === */
+  /* 暴力调试 CSS */
   #p5-background {
     position: fixed !important;
-    top: 0; left: 0;
-    width: 100vw !important; height: 100vh !important;
-    z-index: -1 !important;
-    pointer-events: auto; /* 允许点击背景来激活音频 */
+    top: 0;
+    left: 0;
+    width: 100vw !important;
+    height: 100vh !important;
+    /* 暂时设为最高层级，确保它浮在所有内容表面 */
+    z-index: 9999 !important; 
+    pointer-events: none;
   }
 </style>
 
@@ -50,7 +34,7 @@
 <script>
   let mic, fft;
   let cols, rows;
-  let resolution = 30; // 调整方块大小
+  let resolution = 40; 
   let grid = []; 
   let isAudioStarted = false;
 
@@ -59,11 +43,13 @@
     cnv.id('p5-background');
     cnv.parent(document.body);
     
-    // 初始化 FFT，但先不急着 start mic，等点击
-    fft = new p5.FFT(0.7, 512);
+    // 初始化 FFT
+    fft = new p5.FFT(0.8, 512);
     
     colorMode(HSB, 360, 100, 100, 100);
     calculateGrid();
+    
+    console.log("P5 Setup Complete - Canvas Created");
   }
 
   function calculateGrid() {
@@ -76,14 +62,14 @@
   }
 
   function draw() {
-    clear(); // 清空画布
+    // 【关键调试点】不再使用 clear()，使用半透明黑色背景，制造拖影
+    background(0, 0, 10, 20); // 如果你看到屏幕变黑，说明 p5 在运行！
 
-    // --- 1. 获取音频数据 ---
+    // --- 1. 获取数据 (混合了假数据，确保一定有东西动) ---
     let spectrum;
     if (isAudioStarted) {
       spectrum = fft.analyze();
     } else {
-      // 如果没开启，就传个空数组，防止报错
       spectrum = new Array(512).fill(0);
     }
 
@@ -91,53 +77,54 @@
     grid.shift(); 
     let newCol = new Float32Array(rows);
     
-    // 只有音频开启时才计算新数据
-    if (isAudioStarted) {
-      let usableSpectrumSize = spectrum.length * 0.8; 
-      for (let y = 0; y < rows; y++) {
+    // 模拟数据生成：如果没有音频，我们用 noise 生成波浪，证明渲染没问题
+    let time = millis() * 0.002;
+    
+    for (let y = 0; y < rows; y++) {
+      let val = 0;
+      if (isAudioStarted) {
+        let usableSpectrumSize = spectrum.length * 0.8; 
         let mapIndex = floor(map(rows - y, 0, rows, 0, usableSpectrumSize));
-        newCol[y] = spectrum[mapIndex];
+        val = spectrum[mapIndex];
+      } else {
+        // 生成假数据可视化
+        let noiseVal = noise(y * 0.1, time);
+        if (noiseVal > 0.4) {
+            val = map(noiseVal, 0.4, 1, 0, 200);
+        }
       }
+      newCol[y] = val;
     }
     grid.push(newCol);
 
-    // --- 3. 渲染网格 ---
+    // --- 3. 渲染 ---
     noStroke();
-    
     for (let x = 0; x < cols; x++) {
       for (let y = 0; y < rows; y++) {
         let amp = grid[x][y];
         
-        let xPos = x * resolution;
-        let yPos = y * resolution;
-        
-        if (amp > 20) { 
-          // [有声音] 激活状态：多彩方块
-          let h = map(y, 0, rows, 160, 260); // 上青下紫
-          let s = map(amp, 0, 255, 60, 100);
-          let b = map(amp, 0, 255, 80, 100);
-          let alpha = map(amp, 0, 255, 40, 100);
-          
-          fill(h, s, b, alpha);
-          let sizeMod = map(amp, 0, 255, 0.6, 0.9);
-          rect(xPos, yPos, resolution * sizeMod, resolution * sizeMod, 3);
-          
+        // 只要有数值就画
+        if (amp > 10) { 
+          let h = map(y, 0, rows, 160, 260); 
+          fill(h, 80, 100, 80);
+          rect(x * resolution, y * resolution, resolution * 0.8, resolution * 0.8);
         } else {
-          // [无声音] 静默状态：绘制极淡的灰色网格
-          // 这样你就知道程序还在跑，不是坏了
-          fill(200, 5, 80, 5); // 极淡的颜色
-          rect(xPos, yPos, resolution * 0.2, resolution * 0.2, 1);
+            // 调试点：画出非常明显的空闲网格（深灰色）
+            fill(0, 0, 30, 50); 
+            rect(x * resolution + 5, y * resolution + 5, 5, 5);
         }
       }
     }
 
-    // --- 4. 提示文字 ---
-    if (!isAudioStarted) {
-      fill(0); 
-      textAlign(CENTER);
-      textSize(20);
-      text("CLICK ANYWHERE TO START AUDIO", width/2, height/2);
-    }
+    // --- 4. 调试文字 ---
+    fill(0, 0, 100);
+    textSize(20);
+    textAlign(LEFT, TOP);
+    text("DEBUG MODE: " + (isAudioStarted ? "MIC ON" : "MIC OFF (CLICK SCREEN)"), 20, 20);
+    
+    // 画一个旋转的红球，证明 draw() 每一帧都在跑
+    fill(0, 100, 100);
+    ellipse(mouseX, mouseY, 20, 20);
   }
 
   function windowResized() {
@@ -145,7 +132,6 @@
     calculateGrid();
   }
 
-  // --- 关键：点击屏幕任何地方激活麦克风 ---
   function mousePressed() {
     startAudioContext();
   }
@@ -156,14 +142,11 @@
 
   function startAudioContext() {
     if (!isAudioStarted) {
-      userStartAudio(); // p5.sound 的标准启动函数
-      
+      userStartAudio();
       mic = new p5.AudioIn();
       mic.start();
       fft.setInput(mic);
-      
       isAudioStarted = true;
-      console.log("Audio Context Started");
     }
   }
 </script>
