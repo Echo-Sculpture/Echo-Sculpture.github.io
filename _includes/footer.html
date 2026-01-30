@@ -14,19 +14,12 @@
 </div>
 
 <style>
-  /* 基础背景穿透设置 */
-  html, body, #main, .initial-content, .page, .page__inner-wrap, .page__content, .page__footer, .masthead, .greedy-nav, .sidebar, .archive, #main-content, #main-wrapper, .wrapper {
-    background-color: transparent !important;
-    background: transparent !important;
-    border: none !important;
-    box-shadow: none !important;
-  }
+  html, body, #main, .wrapper, .page__inner-wrap { background-color: transparent !important; }
   .page__inner-wrap {
-    background-color: rgba(255, 255, 255, 0.75) !important; 
-    padding: 30px !important;
-    border-radius: 15px !important;
-    backdrop-filter: blur(4px);
+    background-color: rgba(255, 255, 255, 0.8) !important;
+    backdrop-filter: blur(5px);
     z-index: 1;
+    position: relative;
   }
   #p5-background {
     position: fixed !important;
@@ -41,115 +34,109 @@
 
 {% raw %}
 <script>
-  /**
-   * 基于用户提供的 Rectangle & Spectrogram 类逻辑
-   */
-  class Rectangle {
-    constructor(x, y, width, height) {
-      this.x = x; this.y = y; this.width = width; this.height = height;
-    }
-    getBottom() { return this.y + this.height; }
-    getRight() { return this.x + this.width; }
+// 将所有 Class 放入 raw 标签中，防止 Jekyll 解析错误
+class Rectangle {
+  constructor(x, y, width, height) {
+    this.x = x; this.y = y; this.width = width; this.height = height;
   }
+  getBottom() { return this.y + this.height; }
+}
 
-  class Spectrogram extends Rectangle {
-    constructor(x, y, width, height, lengthInSeconds) {
-      super(x, y, width, height);
-      this.samplingRate = sampleRate() || 44100;
-      this.lengthInSeconds = lengthInSeconds;
-      this.bufferIndex = 0;
-      
-      // 双缓冲区实现平滑滚动
-      this.gfx1 = createGraphics(this.width, this.height);
-      this.gfx2 = createGraphics(this.width, this.height);
-      this.gfx1.x = 0;
-      this.gfx2.x = this.width;
-    }
-
-    update(spectrum) {
-      let xBufferVal = map(this.bufferIndex, 0, this.lengthInSeconds * this.samplingRate, 0, this.width);
-      let xVal = xBufferVal % this.width;
-      let selectIdx = floor(xBufferVal / this.width) % 2;
-      let activeGfx = (selectIdx === 0) ? this.gfx1 : this.gfx2;
-
-      // 滚动逻辑
-      if (selectIdx === 0) {
-        this.gfx1.x = -xVal;
-        this.gfx2.x = this.width - xVal;
-      } else {
-        this.gfx1.x = this.width - xVal;
-        this.gfx2.x = -xVal;
-      }
-
-      activeGfx.noStroke();
-      // 使用像素块渲染 (基于 Spectrogram 逻辑)
-      let res = 15; 
-      for (let i = 0; i < spectrum.length; i += 4) {
-        let y = map(i, 0, spectrum.length, this.height, 0);
-        let amp = spectrum[i];
-        if (amp > 40) {
-          let hue = map(i, 0, spectrum.length, 200, 300); // 垂直颜色梯度
-          activeGfx.fill(hue, 80, 90, map(amp, 0, 255, 0, 100));
-          activeGfx.rect(xVal, y, 2, res); 
-        }
-      }
-      this.bufferIndex += spectrum.length;
-    }
-
-    draw() {
-      image(this.gfx1, this.gfx1.x, this.y);
-      image(this.gfx2, this.gfx2.x, this.y);
-    }
-  }
-
-  let mic, fft, spectrogram;
-  let isStarted = false;
-
-  function setup() {
-    let cnv = createCanvas(windowWidth, windowHeight);
-    cnv.id('p5-background');
-    cnv.parent(document.body);
-    colorMode(HSB, 360, 100, 100, 100);
+class Spectrogram extends Rectangle {
+  constructor(x, y, width, height, lengthInSeconds) {
+    super(x, y, width, height);
+    this.samplingRate = sampleRate();
+    this.lengthInSeconds = lengthInSeconds;
+    this.bufferIndex = 0;
     
-    fft = new p5.FFT(0.8, 1024);
-    // 延迟初始化 Spectrogram 直到音频环境准备好
+    // 你的双缓冲逻辑
+    this.gfx1 = createGraphics(this.width, this.height);
+    this.gfx2 = createGraphics(this.width, this.height);
+    this.gfx1.x = 0;
+    this.gfx2.x = this.width;
   }
 
-  function draw() {
-    clear(); 
-    if (!isStarted) {
-      fill(100);
-      textAlign(CENTER);
-      text("CLICK TO START AUDIO SYSTEM", width/2, height/2);
-      return;
+  update(spectrum) {
+    let totalSamples = this.lengthInSeconds * this.samplingRate;
+    let xBufferVal = map(this.bufferIndex, 0, totalSamples, 0, this.width);
+    let xVal = xBufferVal % this.width;
+    let selectIdx = floor(xBufferVal / this.width) % 2;
+    
+    let activeGfx = (selectIdx === 0) ? this.gfx1 : this.gfx2;
+
+    if (selectIdx === 0) {
+      this.gfx1.x = -xVal;
+      this.gfx2.x = this.width - xVal;
+    } else {
+      this.gfx1.x = this.width - xVal;
+      this.gfx2.x = -xVal;
     }
 
-    let spectrum = fft.analyze();
-    if (spectrogram) {
-      spectrogram.update(spectrum);
-      spectrogram.draw();
+    activeGfx.push();
+    activeGfx.strokeWeight(2);
+    for (let i = 0; i < spectrum.length; i += 8) {
+      let y = map(i, 0, spectrum.length, this.height, 0);
+      let amp = spectrum[i];
+      if (amp > 50) {
+        let hue = map(i, 0, spectrum.length, 180, 260);
+        activeGfx.stroke(hue, 80, 90, map(amp, 0, 255, 0, 100));
+        activeGfx.line(xVal, y, xVal + 2, y);
+      }
     }
+    activeGfx.pop();
+    this.bufferIndex += spectrum.length;
   }
 
-  function mousePressed() {
-    if (!isStarted) {
-      userStartAudio().then(() => {
-        mic = new p5.AudioIn();
-        mic.start();
-        fft.setInput(mic);
-        // 初始化 Spectrogram 对象，持续 10 秒一个循环
-        spectrogram = new Spectrogram(0, 0, width, height, 10);
-        isStarted = true;
-      });
-    }
+  draw() {
+    image(this.gfx1, this.gfx1.x, this.y);
+    image(this.gfx2, this.gfx2.x, this.y);
+  }
+}
+
+let mic, fft, visualizer;
+let isReady = false;
+
+function setup() {
+  let cnv = createCanvas(windowWidth, windowHeight);
+  cnv.id('p5-background');
+  cnv.parent(document.body);
+  colorMode(HSB, 360, 100, 100, 100);
+  fft = new p5.FFT(0.8, 512);
+}
+
+function draw() {
+  clear();
+  if (!isReady) {
+    fill(150);
+    textAlign(CENTER);
+    text("CLICK ANYWHERE TO ACTIVATE MIC", width/2, height/2);
+    return;
   }
 
-  function windowResized() {
-    resizeCanvas(windowWidth, windowHeight);
-    if (spectrogram) {
-      // 窗口缩放时重置，防止缓冲区错位
-      spectrogram = new Spectrogram(0, 0, width, height, 10);
-    }
+  let spectrum = fft.analyze();
+  if (visualizer) {
+    visualizer.update(spectrum);
+    visualizer.draw();
   }
+}
+
+// 必须点击页面才能启动音频
+function mousePressed() {
+  if (!isReady) {
+    userStartAudio().then(() => {
+      mic = new p5.AudioIn();
+      mic.start();
+      fft.setInput(mic);
+      // 这里的 sampleRate() 现在有效了
+      visualizer = new Spectrogram(0, 0, width, height, 10);
+      isReady = true;
+      console.log("Audio System Started");
+    });
+  }
+}
+
+function windowResized() {
+  resizeCanvas(windowWidth, windowHeight);
+}
 </script>
 {% endraw %}
