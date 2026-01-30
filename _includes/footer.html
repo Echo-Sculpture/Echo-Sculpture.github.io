@@ -1,69 +1,95 @@
+{% if site.author.github or site.author.bitbucket or site.atom_feed.hide != true %}
+<div class="page__footer-follow">
+  <ul class="social-icons">
+    {% if site.author.github %}
+      <li><a href="https://github.com/{{ site.author.github }}"><i class="fab fa-github" aria-hidden="true"></i> GitHub</a></li>
+    {% endif %}
+    <li><a href="{% if site.atom_feed.path %}{{ site.atom_feed.path }}{% else %}{{ base_path }}/feed.xml{% endif %}"><i class="fa fa-fw fa-rss-square" aria-hidden="true"></i> Feed</a></li>
+  </ul>
+</div>
+{% endif %}
+
 <div class="page__footer-copyright">
-  &copy; {{ site.time | date: '%Y' }} {{ site.name | default: site.title }}
+  &copy; {{ site.time | date: '%Y' }} {{ site.name | default: site.title }}. Site last updated {{ "now" | date: '%Y-%m-%d' }}
 </div>
 
 <style>
-  /* 强制画布全屏、置底、可见 */
-  #p5-canvas {
-    position: fixed !important;
-    top: 0 !important;
-    left: 0 !important;
-    width: 100vw !important;
-    height: 100vh !important;
-    z-index: -1 !important;
-    background: #000 !important; /* 强制背景黑色，能看到它就说明加载成功 */
-  }
-  /* 强制所有上层容器透明 */
-  html, body, #main, .wrapper, .page__inner-wrap {
+  /* 1. 深度拆除：把所有可能挡住背景的层级全部设为透明 */
+  html, body, 
+  #main, 
+  .initial-content, 
+  .page, 
+  .page__inner-wrap,
+  .page__content, 
+  .page__footer,
+  .masthead, 
+  .greedy-nav, 
+  .sidebar,
+  .archive {
+    background-color: transparent !important;
     background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+
+  /* 2. 这里的选择器是关键：AcademicPages 某些版本会给 wrapper 加背景 */
+  #main-content, #main-wrapper, .wrapper {
+    background-color: transparent !important;
+  }
+
+  /* 3. 保护文字可读性：只给最内层的文字块加半透明色 */
+  /* 如果你觉得文字还是看不清，可以把 0.75 调高到 0.85 */
+  .page__inner-wrap {
+    background-color: rgba(255, 255, 255, 0.75) !important; 
+    padding: 30px !important;
+    border-radius: 15px !important;
+    backdrop-filter: blur(4px); /* 让背景有一点朦胧感，更高级 */
+    z-index: 1;
+  }
+
+  /* 4. 确保 p5 画布在所有透明层之下，但在 body 之上 */
+  #p5-background {
+    position: fixed !important;
+    top: 0;
+    left: 0;
+    z-index: -1 !important; /* 置底 */
+    pointer-events: none;
   }
 </style>
 
 {% raw %}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.min.js"></script>
 <script>
-  // 使用最基础的 JavaScript 语法，避免任何可能引起歧义的符号
-  var mic, fft;
-  var isStarted = false;
-
   function setup() {
-    var cnv = createCanvas(windowWidth, windowHeight);
-    cnv.id('p5-canvas');
+    let cnv = createCanvas(windowWidth, windowHeight);
+    cnv.style('position', 'fixed');
+    cnv.style('top', '0');
+    cnv.style('left', '0');
+    cnv.style('z-index', '-1');
     cnv.parent(document.body);
-    
-    // 初始化颜色模式
-    colorMode(HSB, 360, 100, 100);
-    console.log("P5 initialized");
   }
 
   function draw() {
-    background(0, 0, 10); // 深色背景
-
-    if (!isStarted) {
-      fill(255);
-      textAlign(CENTER);
-      text("CLICK TO ACTIVATE VISUALIZER", width/2, height/2);
-    } else {
-      // 绘制简单的动态方块作为测试
-      for (var i = 0; i < 10; i++) {
-        var h = (frameCount + i * 20) % 360;
-        fill(h, 80, 100);
-        rect(i * 100, height/2 + sin(frameCount * 0.05 + i) * 100, 80, 80);
+    clear(); 
+    stroke(0, 122, 255, 120); 
+    strokeWeight(1.5);
+    let step = 60;
+    for (let x = 0; x <= width; x += step) {
+      for (let y = 0; y <= height; y += step) {
+        let d = dist(mouseX, mouseY, x, y);
+        if (d < 250) {
+          let angle = atan2(y - mouseY, x - mouseX);
+          let offset = map(d, 0, 250, 20, 0);
+          let px = x + cos(angle) * offset;
+          let py = y + sin(angle) * offset;
+          point(px, py);
+          if (d < 150) {
+            line(px, py, mouseX, mouseY);
+          }
+        } else {
+          point(x, y);
+        }
       }
-    }
-  }
-
-  function mousePressed() {
-    if (!isStarted) {
-      // 激活音频
-      if (typeof p5.AudioIn !== 'undefined') {
-        mic = new p5.AudioIn();
-        mic.start();
-        fft = new p5.FFT();
-        fft.setInput(mic);
-      }
-      isStarted = true;
-      console.log("Audio enabled");
     }
   }
 
