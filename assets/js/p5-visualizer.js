@@ -17,20 +17,29 @@ class Spectrogram extends Rectangle {
   }
 
   update(spectrum) {
+    // 【关键修正】增加数据检查
+    if (!spectrum || spectrum.length === 0) return;
+
     let totalSamples = this.lenSec * this.samplingRate;
     let xBufVal = map(this.bufferIndex, 0, totalSamples, 0, this.w);
     let xVal = xBufVal % this.w;
     let select = Math.floor(xBufVal / this.w) % 2;
     let active = (select === 0) ? this.gfx1 : this.gfx2;
 
+    // 清除即将写入的新区域，防止重影
+    active.noStroke();
+    active.fill(0, 5); // 稍微带点透明度的黑
+    active.rect(xVal, 0, 5, this.h);
+
     if (select === 0) { this.gfx1.x = -xVal; this.gfx2.x = this.w - xVal; }
     else { this.gfx1.x = this.w - xVal; this.gfx2.x = -xVal; }
 
     active.noStroke();
+    // 渲染频谱：为了性能，每隔几个频点抽样一次
     for (let i = 0; i < spectrum.length; i += 6) {
-      let y = map(i, 0, spectrum.length, this.h, 0);
       let amp = spectrum[i];
-      if (amp > 30) {
+      if (amp > 20) {
+        let y = map(i, 0, spectrum.length, this.h, 0);
         let hue = map(i, 0, spectrum.length, 190, 280);
         active.fill(hue, 80, 100, map(amp, 0, 255, 0, 100));
         active.rect(xVal, y, 2, 4);
@@ -57,14 +66,21 @@ function setup() {
 
 function draw() {
   if (!isReady) {
-    background(15); 
-    fill(255); textAlign(CENTER);
-    text("CLICK TO START MIC", width/2, height/2);
+    background(10); // 深灰色背景
+    fill(255);
+    textAlign(CENTER);
+    text("MIC INITIALIZING / CLICK TO START", width/2, height/2);
     return;
   }
-  clear();
+  
+  // 核心：保持背景完全透明，让 CSS 的底层颜色（或黑色）透出来
+  clear(); 
+  
   let spectrum = fft.analyze();
-  if (visualizer) { visualizer.update(spectrum); visualizer.draw(); }
+  if (visualizer && spectrum) { 
+    visualizer.update(spectrum); 
+    visualizer.draw(); 
+  }
 }
 
 function mousePressed() {
@@ -72,11 +88,22 @@ function mousePressed() {
     userStartAudio().then(() => {
       mic = new p5.AudioIn();
       mic.start(() => {
-        visualizer = new Spectrogram(0, 0, width, height, 15);
-        isReady = true;
+        console.log("Mic Active");
+        // 延迟一秒初始化 visualizer，确保音频上下文完全稳定
+        setTimeout(() => {
+          visualizer = new Spectrogram(0, 0, width, height, 15);
+          isReady = true;
+        }, 500);
+      }, (err) => {
+        alert("Mic Error: " + err);
       });
     });
   }
 }
 
-function windowResized() { resizeCanvas(windowWidth, windowHeight); }
+function windowResized() {
+  resizeCanvas(windowWidth, windowHeight);
+  if (visualizer) {
+    visualizer = new Spectrogram(0, 0, width, height, 15);
+  }
+}
