@@ -1,57 +1,70 @@
 /* assets/js/p5-visualizer.js */
 
 class Spectrogram {
-  constructor(x, y, w, h, lenSec) {
-    this.x = x;
-    this.y = y;
-    this.w = w;
-    this.h = h;
-    this.lenSec = lenSec; // 一个屏幕循环的时间
-    this.bufferIndex = 0;
+  constructor(x, y, w, h, lengthInSeconds) {
+    this.x = x; this.y = y; this.width = w; this.height = h;
     this.samplingRate = sampleRate() || 44100;
+    this.lengthInSeconds = lengthInSeconds;
+    this.bufferIndex = 0;
+
+    // 核心：基于你源码的双缓冲滚动逻辑
+    this.gfx1 = createGraphics(this.width, this.height);
+    this.gfx2 = createGraphics(this.width, this.height);
+    this.gfx1.colorMode(HSB, 360, 100, 100, 100);
+    this.gfx2.colorMode(HSB, 360, 100, 100, 100);
     
-    // 创建一个离屏画布来保存历史频谱
-    this.pg = createGraphics(w, h);
-    this.pg.colorMode(HSB, 360, 100, 100, 100);
-    this.pg.background(0, 0); // 初始透明
+    this.gfx1.x = 0;
+    this.gfx2.x = this.width;
   }
 
   update(spectrum) {
     if (!spectrum) return;
 
-    // 计算当前时间点对应的 X 坐标
-    let totalSamples = this.lenSec * this.samplingRate;
-    let xVal = map(this.bufferIndex % totalSamples, 0, totalSamples, 0, this.w);
-    
-    this.pg.push();
-    this.pg.noStroke();
-    
-    // 每次画新的一列前，先擦除这一小条旧数据，防止重叠
-    this.pg.erase();
-    this.pg.rect(xVal, 0, 5, this.h);
-    this.pg.noErase();
+    // 1. 计算当前 X 像素位置
+    let totalSamples = this.lengthInSeconds * this.samplingRate;
+    let xBufferVal = map(this.bufferIndex, 0, totalSamples, 0, this.width);
+    let xVal = xBufferVal % this.width;
+    let selectOffscreenBuffer = floor(xBufferVal / this.width) % 2;
 
-    // 绘制频谱列
+    // 2. 决定哪个缓冲区在主位，并处理偏移（实现滚动感）
+    if (selectOffscreenBuffer === 0) {
+      this.gfx1.x = -xVal;
+      this.gfx2.x = this.width - xVal;
+    } else {
+      this.gfx1.x = this.width - xVal;
+      this.gfx2.x = -xVal;
+    }
+
+    let activeGfx = (selectOffscreenBuffer === 0) ? this.gfx1 : this.gfx2;
+
+    // 3. 在活跃缓冲区绘图
+    activeGfx.push();
+    activeGfx.noStroke();
+    
+    // 渲染列逻辑：每 4 个频点取样，模仿你原代码的细腻感
     for (let i = 0; i < spectrum.length; i += 4) {
       let amp = spectrum[i];
-      if (amp > 10) { // 灵敏度阈值
-        let yPos = map(i, 0, spectrum.length, this.h, 0);
-        let hueVal = map(i, 0, spectrum.length, 200, 280); // 蓝到紫
-        let br = map(amp, 0, 255, 20, 100);
-        let alp = map(amp, 0, 255, 30, 100);
+      if (amp > 15) {
+        let yPos = map(i, 0, spectrum.length, this.height, 0);
+        // 垂直色调映射：从冷青到暖紫 (180° - 300°)
+        let hueVal = map(i, 0, spectrum.length, 180, 280); 
+        let brightness = map(amp, 0, 255, 30, 100);
+        let alpha = map(amp, 0, 255, 40, 100);
         
-        this.pg.fill(hueVal, 80, br, alp);
-        this.pg.rect(xVal, yPos, 2, 4); // 画一个像素块
+        activeGfx.fill(hueVal, 75, brightness, alpha);
+        // 像素块设计：宽度略窄，高度略长，形成垂直律动感
+        activeGfx.rect(xVal, yPos, 3, 5, 1); 
       }
     }
-    this.pg.pop();
+    activeGfx.pop();
 
     this.bufferIndex += spectrum.length;
   }
 
   draw() {
-    // 将离屏画布渲染到主屏幕
-    image(this.pg, this.x, this.y);
+    // 绘制两个缓冲区，实现无缝循环
+    image(this.gfx1, this.gfx1.x, this.y);
+    image(this.gfx2, this.gfx2.x, this.y);
   }
 }
 
@@ -62,34 +75,27 @@ function setup() {
   cnv.id('p5-background');
   cnv.parent(document.body);
   colorMode(HSB, 360, 100, 100, 100);
-  fft = new p5.FFT(0.8, 512);
+  
+  // 采样率越高，频谱越细腻
+  fft = new p5.FFT(0.85, 1024);
 }
 
 function draw() {
   if (!isReady) {
     background(10);
-    fill(255); textAlign(CENTER);
-    text("TAP SCREEN TO START", width/2, height/2);
+    fill(255); textAlign(CENTER); textSize(16);
+    text("INTERACTIVE SPECTROGRAM: CLICK TO ACTIVATE", width/2, height/2);
     return;
   }
   
-  clear(); // 保持背景透明，透出你的网页内容
+  // 必须保持 clear() 才能看到网页正文
+  clear();
 
   let spectrum = fft.analyze();
-  
   if (visualizer && spectrum) {
     visualizer.update(spectrum);
     visualizer.draw();
   }
-
-  // --- 调试用：保留那个会动的红圈，确认数据流没断 ---
-  // 如果你觉得干扰，可以把下面这段删掉
-  let amp = fft.getEnergy(20, 200);
-  push();
-  noFill();
-  stroke(0, 100, 100, 30); // 淡淡的红圈
-  ellipse(width/2, height/2, 50 + amp);
-  pop();
 }
 
 function mousePressed() {
@@ -97,13 +103,12 @@ function mousePressed() {
     if (getAudioContext().state !== 'running') {
       getAudioContext().resume();
     }
-
     userStartAudio().then(() => {
       mic = new p5.AudioIn();
       mic.start(() => {
         fft.setInput(mic);
-        // 初始化：15秒扫完一整个屏幕
-        visualizer = new Spectrogram(0, 0, width, height, 15);
+        // lengthInSeconds = 20: 意味着 20 秒滚完一屏，速度更稳重优雅
+        visualizer = new Spectrogram(0, 0, width, height, 20);
         isReady = true;
       });
     });
@@ -112,6 +117,6 @@ function mousePressed() {
 
 function windowResized() {
   resizeCanvas(windowWidth, windowHeight);
-  // 窗口改变大小时重新初始化，防止拉伸
-  if(isReady) visualizer = new Spectrogram(0, 0, width, height, 15);
+  // 窗口重置时重刷缓冲区，确保画面不拉伸
+  if(isReady) visualizer = new Spectrogram(0, 0, width, height, 20);
 }
