@@ -59,35 +59,113 @@
 
 {% raw %}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/addons/p5.sound.min.js"></script>
+
+<style>
+  /* 确保画布在最底层且全屏 */
+  #p5-background {
+    position: fixed !important;
+    top: 0;
+    left: 0;
+    width: 100vw !important;
+    height: 100vh !important;
+    z-index: -1 !important;
+    pointer-events: none; /* 让鼠标点击穿透 */
+  }
+</style>
+
 <script>
+  // --- 基于 Spectrogram 逻辑的像素可视化 ---
+  
+  let mic, fft;
+  let cols, rows;
+  let resolution = 25; // 像素块的大小（像素），数值越大块越大，越抽象
+  let grid = []; // 存储历史数据的二维数组 (Time-Frequency Buffer)
+  
   function setup() {
     let cnv = createCanvas(windowWidth, windowHeight);
-    cnv.style('position', 'fixed');
-    cnv.style('top', '0');
-    cnv.style('left', '0');
-    cnv.style('z-index', '-1');
+    cnv.id('p5-background');
     cnv.parent(document.body);
+    
+    // 初始化音频
+    mic = new p5.AudioIn();
+    mic.start();
+    
+    // 初始化 FFT
+    // smoothing: 0.8 (让动态更平滑), bins: 1024
+    fft = new p5.FFT(0.8, 1024);
+    fft.setInput(mic);
+    
+    colorMode(HSB, 360, 100, 100, 100);
+    calculateGrid();
+  }
+
+  function calculateGrid() {
+    cols = ceil(width / resolution) + 1;
+    rows = ceil(height / resolution) + 1;
+    
+    // 初始化网格数据（全0）
+    grid = [];
+    for (let i = 0; i < cols; i++) {
+      grid[i] = new Float32Array(rows).fill(0);
+    }
   }
 
   function draw() {
-    clear(); 
-    stroke(0, 122, 255, 120); 
-    strokeWeight(1.5);
-    let step = 60;
-    for (let x = 0; x <= width; x += step) {
-      for (let y = 0; y <= height; y += step) {
-        let d = dist(mouseX, mouseY, x, y);
-        if (d < 250) {
-          let angle = atan2(y - mouseY, x - mouseX);
-          let offset = map(d, 0, 250, 20, 0);
-          let px = x + cos(angle) * offset;
-          let py = y + sin(angle) * offset;
-          point(px, py);
-          if (d < 150) {
-            line(px, py, mouseX, mouseY);
-          }
-        } else {
-          point(x, y);
+    clear(); // 保持背景透明，露出网页底色
+    // 如果想要深色背景，可以取消下面这行的注释
+    // background(230, 20, 10, 100); 
+
+    let spectrum = fft.analyze();
+    
+    // --- 1. 数据滚动逻辑 (Scrolling Logic) ---
+    // 类似于源代码中的 circular buffer，我们把所有列向左移
+    grid.shift(); 
+    
+    // --- 2. 处理新的一列数据 ---
+    let newCol = new Float32Array(rows);
+    
+    // 我们只取频谱中常用的部分（忽略极高频，那里通常没声音）
+    let usableSpectrumSize = spectrum.length * 0.7; 
+    
+    for (let y = 0; y < rows; y++) {
+      // 这里的映射逻辑：
+      // y=0 是顶部（高频），y=rows 是底部（低频）
+      // 我们需要反转，让底部显示低频
+      let mapIndex = floor(map(rows - y, 0, rows, 0, usableSpectrumSize));
+      
+      // 获取音量值 (0-255)
+      let amp = spectrum[mapIndex];
+      newCol[y] = amp;
+    }
+    grid.push(newCol);
+
+    // --- 3. 渲染网格 (Pixel Rendering) ---
+    noStroke();
+    
+    for (let x = 0; x < cols; x++) {
+      for (let y = 0; y < rows; y++) {
+        let amp = grid[x][y];
+        
+        // 阈值过滤：太小的声音不渲染，保持画面干净
+        if (amp > 50) { 
+          
+          // --- 颜色算法 (Design Sense) ---
+          // 底部(低频) = 紫色/深蓝 (Hue 260-220)
+          // 顶部(高频) = 青色/亮白 (Hue 180-160)
+          let h = map(y, 0, rows, 160, 260); 
+          let s = map(amp, 0, 255, 40, 90); // 声音越大，颜色越饱和
+          let b = map(amp, 0, 255, 40, 100); // 声音越大，越亮
+          let alpha = map(amp, 0, 255, 0, 90); // 透明度随音量变化
+          
+          fill(h, s, b, alpha);
+          
+          // --- 几何形态 ---
+          // 根据音量微调方块大小，制造“像素呼吸”的效果
+          let sizeMod = map(amp, 0, 255, 0.5, 0.95);
+          
+          // 绘制圆角矩形，更具现代感
+          rect(x * resolution, y * resolution, resolution * sizeMod, resolution * sizeMod, 2);
         }
       }
     }
@@ -95,6 +173,20 @@
 
   function windowResized() {
     resizeCanvas(windowWidth, windowHeight);
+    calculateGrid(); // 窗口改变时重新计算网格
+  }
+
+  // 交互激活音频上下文
+  function touchStarted() {
+    if (getAudioContext().state !== 'running') {
+      getAudioContext().resume();
+    }
+  }
+  
+  function mousePressed() {
+    if (getAudioContext().state !== 'running') {
+      getAudioContext().resume();
+    }
   }
 </script>
 {% endraw %}
