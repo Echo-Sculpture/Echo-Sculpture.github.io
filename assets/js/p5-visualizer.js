@@ -1,38 +1,38 @@
 /* assets/js/p5-visualizer.js */
 
-/**
- * 原作者：Jon Froehlich (http://makeabilitylab.io/)
- * 适配 Jekyll 背景逻辑：Gemini
- */
-
-// --- 全局变量 ---
+// ==========================================
+// 1. 驱动逻辑：负责初始化和调用原版类
+// ==========================================
 let mic, fft, spectrogram;
 let isAudioStarted = false;
 
-// --- 适配函数 ---
 function setup() {
+  // 铺满全屏
   let cnv = createCanvas(windowWidth, windowHeight);
   cnv.id('p5-background');
   cnv.parent(document.body);
   
-  // 初始化 FFT
+  // 原版默认配色和采样初始化
   fft = new p5.FFT(0.8, 1024);
 }
 
 function draw() {
   if (!isAudioStarted) {
-    background(15);
-    fill(200);
+    background(10);
+    fill(255);
     textAlign(CENTER);
-    textSize(20);
-    text("INTERACTIVE BACKGROUND: CLICK TO ACTIVATE", width / 2, height / 2);
+    textSize(18);
+    text("JON FROEHLICH SPECTROGRAM\n\nCLICK TO ACTIVATE MIC", width/2, height/2);
     return;
   }
 
-  clear(); // 保持背景透明
+  // 科学背景色：原版通常使用深色背景
+  background(0); 
 
   let spectrum = fft.analyze();
+  
   if (spectrogram && spectrum) {
+    // 调用原版类的 update 和 draw
     spectrogram.update(spectrum);
     spectrogram.draw();
   }
@@ -44,10 +44,16 @@ function mousePressed() {
       mic = new p5.AudioIn();
       mic.start(() => {
         fft.setInput(mic);
-        // 初始化原版 Spectrogram 类
-        // 参数：x, y, width, height, backgroundColor, lengthInSeconds
-        spectrogram = new Spectrogram(0, 0, width, height, color(0, 0), 15);
-        spectrogram.colorScheme = COLORSCHEME.PURPLEICE; // 使用你喜欢的紫色调
+        
+        /** * 初始化原版 Spectrogram 类
+         * 参数：x, y, width, height, backgroundColor, lengthInSeconds
+         */
+        spectrogram = new Spectrogram(0, 0, width, height, color(10), 15);
+        
+        // 设置原版定义的配色方案
+        spectrogram.colorScheme = COLORSCHEME.PURPLEICE; 
+        spectrogram.bDrawAxes = true; // 开启原版坐标轴
+        
         isAudioStarted = true;
       });
     });
@@ -56,12 +62,16 @@ function mousePressed() {
 
 function windowResized() {
   resizeCanvas(windowWidth, windowHeight);
-  // 窗口缩放时重置，防止原版双缓冲错位
-  if(isAudioStarted) spectrogram = new Spectrogram(0, 0, width, height, color(0, 0), 15);
+  if(isAudioStarted) {
+    spectrogram = new Spectrogram(0, 0, width, height, color(10), 15);
+    spectrogram.colorScheme = COLORSCHEME.PURPLEICE;
+    spectrogram.bDrawAxes = true;
+  }
 }
 
 // ==========================================
-// 以下为你提供的原版类定义（保持不变）
+// 2. 以下是 Jon Froehlich 的完整原始类定义
+// (不做任何删减，确保原汁原味)
 // ==========================================
 
 class Rectangle {
@@ -81,28 +91,56 @@ class SoundVisualizer extends Rectangle {
     super(x, y, width, height, backgroundColor);
     this.samplingRate = sampleRate();
     this.lengthInSeconds = lengthInSeconds;
-    this.bDrawAxes = false; // 关闭坐标轴，作为背景更干净
-    this.bufferIndex = 0;
+    this.bDrawAxes = true;
     this.xTicks = [];
-    this.xTickEveryNSec = lengthInSeconds / 4;
-    for (let s = 0; s < lengthInSeconds; s += this.xTickEveryNSec) { this.xTicks.push(s); }
+    this.tickLength = 3;
+    this.axisLabelsTextSize = 10;
+    let numXAxisTicks = 4;
+    this.xTickEveryNSec = lengthInSeconds / numXAxisTicks;
+    for (let xTickInSecs = 0; xTickInSecs < lengthInSeconds; xTickInSecs += this.xTickEveryNSec) {
+      this.xTicks.push(xTickInSecs);
+    }
+    this.hasUpdateEverBeenCalled = false;
+    this.bufferIndex = 0;
   }
 
-  update(buffer) { this.bufferIndex += buffer.length; }
+  update(buffer) {
+    if (this.hasUpdateEverBeenCalled == false) {
+      this.hasUpdateEverBeenCalled = true;
+    }
+    this.bufferIndex += buffer.length;
+  }
+
+  getXAxisLengthInSeconds() { return this.lengthInSeconds; }
   getXAxisLengthInSamples() { return this.lengthInSeconds * this.samplingRate; }
-  getMinXAsSampleIndex() { return (this.bufferIndex < this.getXAxisLengthInSamples()) ? 0 : this.bufferIndex - this.getXAxisLengthInSamples(); }
-  getMaxXAsSampleIndex() { return (this.bufferIndex < this.getXAxisLengthInSamples()) ? this.getXAxisLengthInSamples() : this.bufferIndex; }
   convertBufferLengthToXPixels(bufferLength) { return (bufferLength / this.getXAxisLengthInSamples()) * this.width; }
-  
-  // 核心坐标转换
+  getMinXAsTimeInSecs() { return (this.bufferIndex < this.getXAxisLengthInSamples()) ? 0 : (this.bufferIndex - this.getXAxisLengthInSamples()) / this.samplingRate; }
+  getMaxXAsTimeInSecs() { return (this.bufferIndex < this.getXAxisLengthInSamples()) ? this.lengthInSeconds : this.bufferIndex / this.samplingRate; }
+
   getXPixelFromTimeInSecs(timeInSecs) {
-    let minT = this.getMinXAsSampleIndex() / this.samplingRate;
-    let maxT = this.getMaxXAsSampleIndex() / this.samplingRate;
-    return map(timeInSecs, minT, maxT, this.x, this.width);
+    return map(timeInSecs, this.getMinXAsTimeInSecs(), this.getMaxXAsTimeInSecs(), this.x, this.width);
+  }
+
+  drawXAxisTicksAndLabels() {
+    push();
+    textSize(this.axisLabelsTextSize);
+    for (let i = this.xTicks.length - 1; i >= 0; i--) {
+      let xTickInSecs = this.xTicks[i];
+      let xTick = this.getXPixelFromTimeInSecs(xTickInSecs);
+      stroke(220); line(xTick, this.getBottom() - this.tickLength, xTick, this.getBottom());
+      noStroke(); fill(220);
+      let xTickStr = nfc(xTickInSecs, 1) + "s";
+      text(xTickStr, xTick - textWidth(xTickStr)/2, this.getBottom() - (this.tickLength + 2));
+      if (xTick < this.x) {
+        this.xTicks.splice(i, 1);
+        this.xTicks.push(this.xTicks[this.xTicks.length - 1] + this.xTickEveryNSec);
+      }
+    }
+    pop();
   }
 }
 
-const COLORSCHEME = { GRAYSCALE: 'grayscale', RAINBOW: 'rainbow', PURPLEICE: 'purpleice', CUSTOM: 'custom' }
+const COLORSCHEME = { GRAYSCALE: 'grayscale', RAINBOW: 'rainbow', PURPLEICE: 'purpleice', CUSTOM: 'custom' };
 
 class Spectrogram extends SoundVisualizer {
   constructor(x, y, width, height, backgroundColor, lengthInSeconds) {
@@ -119,12 +157,11 @@ class Spectrogram extends SoundVisualizer {
     this.spectrum = spectrum;
     let xBufferVal = map(this.bufferIndex, 0, this.getXAxisLengthInSamples(), 0, this.width);
     let xVal = xBufferVal - (int(xBufferVal / this.width)) * this.width;
-    let selectIdx = int(xBufferVal / this.width) % 2;
-    
-    let offScreenBuffer = (selectIdx == 0) ? this.offscreenGfxBuffer1 : this.offscreenGfxBuffer2;
+    let selectOffscreenBuffer = int(xBufferVal / this.width) % 2;
+    let offScreenBuffer = (selectOffscreenBuffer == 0) ? this.offscreenGfxBuffer1 : this.offscreenGfxBuffer2;
 
     if (xBufferVal > this.width) {
-      if (selectIdx == 0) {
+      if (selectOffscreenBuffer == 0) {
         this.offscreenGfxBuffer1.x = this.width - xVal;
         this.offscreenGfxBuffer2.x = this.width - (xVal + this.width);
       } else {
@@ -134,19 +171,22 @@ class Spectrogram extends SoundVisualizer {
     }
 
     offScreenBuffer.push();
-    offScreenBuffer.strokeWeight(1);
     if(this.colorScheme == COLORSCHEME.PURPLEICE) offScreenBuffer.colorMode(HSB);
-
-    let bufferLenX = this.convertBufferLengthToXPixels(spectrum.length);
+    
+    let bufferLengthInXPixels = this.convertBufferLengthToXPixels(spectrum.length);
     for (let i = 0; i < spectrum.length; i++) {
       let y = map(i, 0, spectrum.length, this.height, 0);
-      let hue = map(spectrum[i], 0, 255, 240, 310); // 紫冰色
-      offScreenBuffer.stroke(hue, 80, map(spectrum[i], 0, 255, 0, 90));
-      
-      if (bufferLenX <= 1) {
+      let col;
+      if(this.colorScheme == COLORSCHEME.PURPLEICE){
+        col = offScreenBuffer.color(map(spectrum[i], 0, 255, 240, 360), 80, 90);
+      } else {
+        col = map(spectrum[i], 0, 255, 0, 255);
+      }
+      offScreenBuffer.stroke(col);
+      if (bufferLengthInXPixels <= 1) {
         offScreenBuffer.point(xVal, y);
       } else {
-        offScreenBuffer.line(xVal, y, xVal + bufferLenX, y);
+        offScreenBuffer.line(xVal, y, xVal + bufferLengthInXPixels, y);
       }
     }
     offScreenBuffer.pop();
@@ -156,5 +196,22 @@ class Spectrogram extends SoundVisualizer {
   draw() {
     image(this.offscreenGfxBuffer1, this.offscreenGfxBuffer1.x, this.y);
     image(this.offscreenGfxBuffer2, this.offscreenGfxBuffer2.x, this.y);
+    if (this.bDrawAxes) this.drawAxes();
+  }
+
+  drawAxes() {
+    if (!this.spectrum) return;
+    push();
+    let nyquistFreq = this.samplingRate / 2.0;
+    let freqRangeOfEachYPixel = nyquistFreq / this.height;
+    for (let yTick = 0; yTick <= this.height; yTick += 100) {
+      stroke(220);
+      line(this.x, yTick, this.x + 5, yTick);
+      noStroke(); fill(220); textSize(10);
+      let freq = (this.height - yTick) * freqRangeOfEachYPixel;
+      text(nfc(freq, 0) + " Hz", this.x + 8, yTick + 4);
+    }
+    pop();
+    this.drawXAxisTicksAndLabels();
   }
 }
